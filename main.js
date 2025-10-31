@@ -2,6 +2,8 @@ import fs from "fs";
 import csv from "csv-parser";
 import dayjs from "dayjs";
 import { format } from "fast-csv";
+import scan from "readline-sync";
+import { parse } from "path";
 
 const INPUT_FILE = "dpwh_flood_control_projects.csv";
 
@@ -18,7 +20,7 @@ function parseDateSafe(v) {
 function median(arr) {
         if (!arr.length) return 0;
 
-        const s = [...arr].sort((a, b) => a - b);
+        const s = [arr].sort((a, b) => a - b);
         const mid = Math.floor(s.length / 2);
         const median = s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 
@@ -211,7 +213,7 @@ async function writeCSV(filename, rows) {
         console.log(`Saved ${filename}`);
 }
 
-async function main() {
+async function generateReports() {
         console.log("Loading data...");
         const rawData = await loadCSV(INPUT_FILE);
         console.log(`Loaded ${rawData.length} raw rows.`);
@@ -220,13 +222,13 @@ async function main() {
         console.log(`Filtered & cleaned: ${data.length} rows`);
 
         const report1 = generateReport1(data);
-        await writeCSV("report1_regional_summary.csv", report1);
+        await writeCSV("report1.csv", report1);
 
         const report2 = generateReport2(data);
-        await writeCSV("report2_contractor_ranking.csv", report2);
+        await writeCSV("report2.csv", report2);
 
         const report3 = generateReport3(data);
-        await writeCSV("report3_annual_trends.csv", report3);
+        await writeCSV("report3.csv", report3);
 
         const summary = generateSummary(
                 data,
@@ -237,4 +239,27 @@ async function main() {
         console.log("summary.json generated successfully");
 }
 
-main().catch((err) => console.error("Error:", err));
+function main(){
+
+        console.log('Select Language Implementation:');
+        console.log('1. Load the File');
+        console.log('2. Generate Reports');
+
+        let choice = parseInt(scan.question("Enter 1 to generate reports or 2 to exit: "));
+        if (choice === 1) {
+                loadCSV(INPUT_FILE)
+                        .then(() => {
+                                console.log("File loaded successfully.");
+                                return generateReports();
+                        })
+                        .catch((err) => {
+                                console.error("Error loading file:", err);
+                        });
+        } else if (choice === 2) {
+                generateReports();
+        } else {
+                console.log("Invalid choice.");
+        }
+}
+
+main();
