@@ -220,13 +220,13 @@ async function main() {
         console.log(`Filtered & cleaned: ${data.length} rows`);
 
         const report1 = generateReport1(data);
-        await writeCSV("report1.csv", report1);
+        await writeCSV("report1_regional_summary.csv", report1);
 
         const report2 = generateReport2(data);
-        await writeCSV("report2.csv", report2);
+        await writeCSV("report2_contractor_ranking.csv", report2);
 
         const report3 = generateReport3(data);
-        await writeCSV("report3.csv", report3);
+        await writeCSV("report3_annual_trends.csv", report3);
 
         const summary = generateSummary(
                 data,
