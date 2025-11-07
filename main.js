@@ -5,6 +5,7 @@ import { format } from "fast-csv";
 import scan from "readline-sync";
 
 const INPUT_FILE = "dpwh_flood_control_projects.csv";
+let loadedData = null;
 
 function parseFloatSafe(v) {
         const n = parseFloat((v || "").toString().replace(/,/g, ""));
@@ -38,7 +39,10 @@ async function loadCSV(filePath) {
                 fs.createReadStream(filePath)
                         .pipe(csv())
                         .on("data", (row) => rows.push(row))
-                        .on("end", () => resolve(rows))
+                        .on("end", () => {
+                                loadedData = rows;
+                                resolve(rows);
+                        })
                         .on("error", (err) => reject(err));
         });
 
@@ -252,16 +256,24 @@ async function writeCSV(filename, rows) {
 }
 
 async function generateReports() {
-        console.log("Generating reports...");
-        const rawData = await loadCSV(INPUT_FILE);
+        if (!loadedData) {
+                console.log("Error: No data loaded. Please load the CSV file first (option 1).");
+                return;
+        }
 
-        const data = cleanAndPrepareData(rawData);
+        console.log("Generating reports...");
+
+        const data = cleanAndPrepareData(loadedData);
+        if (!data.length) {
+                console.log("No valid data after cleaning. Please check your CSV file.");
+                return;
+        }
 
         const report1 = generateReport1(data);
         const file1 = "report1_regional_summary.csv";
         await writeCSV(file1, report1);
         previewFile(
-                "report1_regional_summary.csv",
+                file1,
                 3,
                 "Regional Flood Mitigation Efficiency Summary",
                 "Filtered: Projects from 2021–2023 only",
@@ -272,7 +284,7 @@ async function generateReports() {
         const file2 = "report2_contractor_ranking.csv";
         await writeCSV(file2, report2);
         previewFile(
-                "report2_contractor_ranking.csv",
+                file2,
                 3,
                 "Top Contractors Performance Summary",
                 "Top 15 by TotalCost, >= 5 Projects",
@@ -283,7 +295,7 @@ async function generateReports() {
         const file3 = "report3_cost_trends.csv";
         await writeCSV(file3, report3);
         previewFile(
-                "report3_cost_trends.csv",
+                file3,
                 4,
                 "Cost Savings Trends by Funding Year and Type of Work",
                 "Grouped by FundingYear & TypeOfWork",
@@ -295,6 +307,7 @@ async function generateReports() {
                 Object.fromEntries(report2.map((r) => [r.Contractor, r])),
                 Object.fromEntries(report1.map((r) => [r.Region, r]))
         );
+
         const summaryFile = "summary.json";
         fs.writeFileSync(summaryFile, JSON.stringify(summary, null, 2));
         console.log(`Summary Stats (${summaryFile})`);
@@ -303,6 +316,7 @@ async function generateReports() {
         console.log("\nSummary Preview:");
         console.table(summaryData);
 }
+
 
 function reportSelection() {
         let choice = scan.question("Back to Report Selection (Y/N): ");
