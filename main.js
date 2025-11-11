@@ -1,22 +1,53 @@
+// ********************
+// Last names: De Leon, Lee, Ortega, Robenta
+// Language: JavaScript
+// Paradigm(s): Procedural, Functional
+// ********************
+
+/**
+ * fs module: File system operations
+ * csv-parser: CSV parsing
+ * dayjs: Date parsing and manipulation
+ * fast-csv: CSV writing
+ * readline-sync: Synchronous user input
+ */
 import fs from "fs";
 import csv from "csv-parser";
 import dayjs from "dayjs";
 import { format } from "fast-csv";
 import scan from "readline-sync";
 
+/**
+ * Global Constants and Variables
+ * INPUT_FILE: Path to the input CSV file
+ * loadedData: Variable to hold loaded CSV data
+ */
 const INPUT_FILE = "dpwh_flood_control_projects.csv";
 let loadedData = null;
 
+/**
+ * parseFloatSafe: Safely parse a float from a string, handling commas and invalid numbers
+ * @param {*} v 
+ * @returns 0 if n is not a number, and n if n is a number
+ */
 function parseFloatSafe(v) {
         const n = parseFloat((v || "").toString().replace(/,/g, ""));
         return isNaN(n) ? 0 : n;
 }
 
+/** parseDateSafe: Safely parse a date using dayjs, returning null for invalid dates
+ * @param {*} v 
+ * @returns dayjs object or null
+ */
 function parseDateSafe(v) {
         const d = dayjs(v);
         return d.isValid() ? d : null;
 }
 
+/** median: Calculate the median of an array of numbers
+ * @param {number[]} arr 
+ * @returns median value
+ */
 function median(arr) {
         if (!arr.length) return 0;
 
@@ -27,12 +58,30 @@ function median(arr) {
         return Number(median.toFixed(2));
 }
 
+/** average: Calculate the average of an array of numbers
+ * @param {number[]} arr 
+ * @returns average value
+ */
 function average(arr) {
         const avg = arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
 
         return avg;
 }
 
+/** formatNumber: Format a number with commas and fixed decimal places
+ * @param {number} n 
+ * @param {number} decimals 
+ * @returns formatted string
+ */
+function formatNumber(n, decimals = 2) {
+        if (isNaN(n)) return "0.00";
+        return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+/** loadCSV: Load CSV data from a file path
+ * @param {string} filePath 
+ * @returns Promise resolving to array of rows
+ */
 async function loadCSV(filePath) {
         return new Promise((resolve, reject) => {
                 const rows = [];
@@ -45,10 +94,12 @@ async function loadCSV(filePath) {
                         })
                         .on("error", (err) => reject(err));
         });
-
-
 }
 
+/** cleanAndPrepareData: Clean and prepare raw CSV data for analysis
+ * @param {Array} rawRows 
+ * @returns cleaned data array
+ */
 function cleanAndPrepareData(rawRows) {
         return rawRows
                 .map((row) => {
@@ -86,6 +137,10 @@ function cleanAndPrepareData(rawRows) {
                 .filter(Boolean);
 }
 
+/** generateReport1: Generate Regional Flood Mitigation Efficiency Summary
+ * @param {Array} data 
+ * @returns report array
+ */
 function generateReport1(data) {
         const regionMap = {};
 
@@ -114,18 +169,23 @@ function generateReport1(data) {
                 return {
                         Region: grp.Region,
                         MainIsland: grp.MainIsland,
-                        TotalApprovedBudget: grp.budgets.reduce((a, b) => a + b, 0).toFixed(2),
-                        MedianCostSavings: median(grp.savings),
-                        AvgCompletionDelayDays: avgDelay.toFixed(2),
-                        DelayOver30Percent: delayOver30.toFixed(2),
-                        EfficiencyScore: efficiency.toFixed(2),
+                        TotalApprovedBudget: formatNumber(grp.budgets.reduce((a, b) => a + b, 0)),
+                        MedianCostSavings: formatNumber(median(grp.savings)),
+                        AvgCompletionDelayDays: formatNumber(avgDelay, 2),
+                        DelayOver30Percent: formatNumber(delayOver30, 2),
+                        EfficiencyScore: formatNumber(efficiency, 2),
                 };
+
         });
 
         results.sort((a, b) => b.EfficiencyScore - a.EfficiencyScore);
         return results;
 }
 
+/** generateReport2: Generate Top Contractors Performance Summary
+ * @param {Array} data 
+ * @returns report array
+ */
 function generateReport2(data) {
         const contractorMap = {};
 
@@ -144,17 +204,18 @@ function generateReport2(data) {
                 .filter((c) => c.projects >= 5)
                 .map((c) => {
                         const avgDelay = average(c.delays);
-                        let reliability = (1 - avgDelay / 90) * (c.totalSavings / c.totalCost) * 100;
+                        let reliability = (1 - (avgDelay / 90)) * (c.totalSavings / c.totalCost) * 100;
                         if (!isFinite(reliability)) reliability = 0;
                         reliability = Math.min(100, Math.max(0, reliability));
                         return {
                                 Contractor: c.Contractor,
                                 Projects: c.projects,
-                                AvgDelay: avgDelay.toFixed(2),
-                                TotalCostSavings: c.totalSavings.toFixed(2),
-                                ReliabilityIndex: reliability.toFixed(2),
+                                AvgDelay: formatNumber(avgDelay),
+                                TotalCostSavings: formatNumber(c.totalSavings),
+                                ReliabilityIndex: formatNumber(reliability),
                                 RiskFlag: reliability < 50 ? "High Risk" : "OK",
                         };
+
                 })
                 .sort((a, b) => b.TotalCostSavings - a.TotalCostSavings)
                 .slice(0, 15);
@@ -162,6 +223,10 @@ function generateReport2(data) {
         return results;
 }
 
+/** generateReport3: Generate Cost Savings Trends by Funding Year and Type of Work
+ * @param {Array} data 
+ * @returns report array
+ */
 function generateReport3(data) {
         const typeMap = {};
 
@@ -182,9 +247,10 @@ function generateReport3(data) {
                         FundingYear: grp.FundingYear,
                         TypeOfWork: grp.TypeOfWork,
                         TotalProjects: grp.savings.length,
-                        AvgCostSavings: avgSavings.toFixed(2),
-                        OverrunRate: overrunRate.toFixed(2),
+                        AvgCostSavings: formatNumber(avgSavings),
+                        OverrunRate: formatNumber(overrunRate),
                 };
+
         });
 
         const baseline = average(avgSavingsByYear[2021] || [0]);
@@ -198,53 +264,83 @@ function generateReport3(data) {
         return results;
 }
 
+/** generateSummary: Generate summary statistics
+ * @param {Array} data 
+ * @param {Object} contractors
+ * @param {Object} regions
+ * @returns summary object
+ */
 function generateSummary(data, contractors, regions) {
         return {
                 totalProjects: data.length,
                 totalContractors: Object.keys(contractors).length,
                 totalRegions: Object.keys(regions).length,
-                avgGlobalDelay: average(data.map((r) => r.CompletionDelayDays)).toFixed(2),
-                totalSavings: data.reduce((a, b) => a + b.CostSavings, 0).toFixed(2),
+                avgGlobalDelay: formatNumber(average(data.map((r) => r.CompletionDelayDays))),
+                totalSavings: formatNumber(data.reduce((a, b) => a + b.CostSavings, 0)),
         };
 }
 
-function previewFile(filePath, lines = 5, reportTitle = "", filterNote = "", reportNumber) {
-        try {
-                if (!fs.existsSync(filePath)) {
-                        console.log(`File not found: ${filePath}`);
-                        return;
-                }
-
-                console.log(`\nReport ${reportNumber}: ${reportTitle}`);
-                console.log(`${reportTitle}`);
-                if (filterNote) console.log(`(${filterNote})`);
-                console.log("");
-
-                const content = fs.readFileSync(filePath, "utf8").trim();
-                const rows = content.split("\n");
-                if (rows.length <= 1) {
-                        console.log(`No data to preview in ${filePath}`);
-                        return;
-                }
-
-                const headers = rows[0].split(",");
-                const dataRows = rows.slice(1, lines);
-
-                const previewData = dataRows.map((row) => {
-                        const values = row.split(",");
-                        const obj = {};
-                        headers.forEach((h, i) => (obj[h] = values[i]));
-                        return obj;
-                });
-
-                console.table(previewData);
-                console.log("");
-        } catch (err) {
-                console.error(`Error previewing ${filePath}:`, err);
+/** previewFile: Preview the first few lines of a CSV file in a formatted table
+ * @param {string} filePath 
+ * @param {number} lines
+ * @param {string} reportTitle
+ * @param {string} filterNote
+ * @param {number} reportNumber
+ * @returns void
+ */
+async function previewFile(filePath, lines = 5, reportTitle = "", filterNote = "", reportNumber) {
+    try {
+        if (!fs.existsSync(filePath)) {
+            console.log(`File not found: ${filePath}`);
+            return;
         }
+
+        console.log(`\nReport ${reportNumber}: ${reportTitle}`);
+        console.log(`${reportTitle}`);
+        if (filterNote) console.log(`(${filterNote})`);
+        console.log("");
+
+        const results = [];
+        await new Promise((resolve, reject) => {
+            fs.createReadStream(filePath)
+                .pipe(csv())
+                .on("data", (data) => {
+                    if (results.length < lines) results.push(data);
+                })
+                .on("end", resolve)
+                .on("error", reject);
+        });
+
+        if (results.length === 0) {
+            console.log(`No data to preview in ${filePath}`);
+            return;
+        }
+
+        const headers = Object.keys(results[0]);
+
+        const colWidths = headers.map(h => Math.max(h.length, ...results.map(r => (r[h] ? r[h].toString().length : 0))) + 2);
+
+        const headerRow = headers.map((h, i) => h.padEnd(colWidths[i])).join(" | ");
+        console.log(headerRow);
+        console.log("-".repeat(headerRow.length));
+
+        for (const r of results) {
+            const rowStr = headers.map((h, i) => (r[h] ? r[h].toString().padEnd(colWidths[i]) : " ".repeat(colWidths[i]))).join(" | ");
+            console.log(rowStr);
+        }
+
+        console.log("");
+    } catch (err) {
+        console.error(`Error previewing ${filePath}:`, err);
+    }
 }
 
 
+/** writeCSV: Write an array of objects to a CSV file
+ * @param {string} filename 
+ * @param {Array} rows
+ * @returns Promise<void>
+ */
 async function writeCSV(filename, rows) {
         const ws = fs.createWriteStream(filename);
         const csvStream = format({ headers: true });
@@ -252,9 +348,11 @@ async function writeCSV(filename, rows) {
         for (const row of rows) csvStream.write(row);
         csvStream.end();
         await new Promise((resolve) => ws.on("finish", resolve));
-        console.log(`(Full table exported to ${filename})`);
 }
 
+/** generateReports: Generate all reports and save to CSV files
+ * @returns void
+ */
 async function generateReports() {
         if (!loadedData) {
                 console.log("Error: No data loaded. Please load the CSV file first (option 1).");
@@ -272,35 +370,38 @@ async function generateReports() {
         const report1 = generateReport1(data);
         const file1 = "report1_regional_summary.csv";
         await writeCSV(file1, report1);
-        previewFile(
+        await previewFile(
                 file1,
                 3,
                 "Regional Flood Mitigation Efficiency Summary",
                 "Filtered: Projects from 2021–2023 only",
                 1
         );
+        console.log(`(Full table exported to ${file1})`);
 
         const report2 = generateReport2(data);
         const file2 = "report2_contractor_ranking.csv";
         await writeCSV(file2, report2);
-        previewFile(
+        await previewFile(
                 file2,
                 3,
                 "Top Contractors Performance Summary",
                 "Top 15 by TotalCost, >= 5 Projects",
                 2
         );
+        console.log(`(Full table exported to ${file2})`);
 
         const report3 = generateReport3(data);
         const file3 = "report3_cost_trends.csv";
         await writeCSV(file3, report3);
-        previewFile(
+        await previewFile(
                 file3,
                 4,
                 "Cost Savings Trends by Funding Year and Type of Work",
                 "Grouped by FundingYear & TypeOfWork",
                 3
         );
+        console.log(`(Full table exported to ${file3})`);
 
         const summary = generateSummary(
                 data,
@@ -317,7 +418,9 @@ async function generateReports() {
         console.table(summaryData);
 }
 
-
+/** reportSelection: Prompt user to return to report selection or exit
+ * @returns void
+ */
 function reportSelection() {
         let choice = scan.question("Back to Report Selection (Y/N): ");
         choice = choice.toUpperCase();
@@ -335,30 +438,35 @@ function reportSelection() {
         }
 }
 
-function main() {
-
-        console.log('Select Language Implementation:');
-        console.log('1. Load the File');
-        console.log('2. Generate Reports');
+/** main: Main program loop for user interaction
+ * @returns void
+ */
+async function main() {
+        console.log("Select Language Implementation:");
+        console.log("1. Load the File");
+        console.log("2. Generate Reports");
 
         let choice = parseInt(scan.question("Enter choice: "));
+
         if (choice === 1) {
-                loadCSV(INPUT_FILE)
-                        .then(() => {
-                                console.log("File loaded successfully.");
-                                main();
-                        })
-                        .catch((err) => {
-                                console.error("Error loading file:", err);
-                        });
+                try {
+                        const rows = await loadCSV(INPUT_FILE);
+                        const cleaned = cleanAndPrepareData(rows);
+                        console.log(`Processing dataset... (${rows.length} rows loaded, ${cleaned.length} filtered for 2021-2023)`);
+
+                        loadedData = cleaned;
+
+                        main();
+                } catch (err) {
+                        console.error("Error loading file:", err);
+                }
         } else if (choice === 2) {
-                generateReports()
-                        .then(() => {
-                                reportSelection();
-                        });
+                await generateReports();
+                reportSelection();
         } else {
                 console.log("Invalid choice.");
         }
 }
 
+// Start the program
 main();
