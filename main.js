@@ -100,41 +100,57 @@ async function loadCSV(filePath) {
  * @param {Array} rawRows 
  * @returns cleaned data array
  */
+/** cleanAndPrepareData: Clean, impute, and prepare raw CSV data */
 function cleanAndPrepareData(rawRows) {
-        return rawRows
-                .map((row) => {
-                        const ApprovedBudgetForContract = parseFloatSafe(row.ApprovedBudgetForContract);
-                        const ContractCost = parseFloatSafe(row.ContractCost);
-                        const StartDate = parseDateSafe(row.StartDate);
-                        const ActualCompletionDate = parseDateSafe(row.ActualCompletionDate);
-                        const FundingYear = parseInt(row.FundingYear);
-                        const Region = row.Region?.trim();
-                        const MainIsland = row.MainIsland?.trim();
-                        const Contractor = row.Contractor?.trim();
-                        const TypeOfWork = row.TypeOfWork?.trim();
 
-                        if (!FundingYear || FundingYear < 2021 || FundingYear > 2023) return null;
-                        if (!StartDate || !ActualCompletionDate) return null;
+        const defaultStart = dayjs("2021-01-01");
+        const defaultCompletion = dayjs("2021-12-31");
 
-                        const CostSavings = ApprovedBudgetForContract - ContractCost;
-                        const CompletionDelayDays = ActualCompletionDate.diff(StartDate, "day");
+        const cleaned = [];
 
-                        return {
-                                row,
-                                ApprovedBudgetForContract,
-                                ContractCost,
-                                StartDate,
-                                ActualCompletionDate,
-                                FundingYear,
-                                Region,
-                                MainIsland,
-                                Contractor,
-                                TypeOfWork,
-                                CostSavings,
-                                CompletionDelayDays,
-                        };
-                })
-                .filter(Boolean);
+        for (const row of rawRows) {
+
+                const FundingYear = parseInt(row.FundingYear);
+                if (!FundingYear || FundingYear < 2021 || FundingYear > 2023)
+                        continue;
+
+                const ApprovedBudgetForContract =
+                        parseFloatSafe(row.ApprovedBudgetForContract) || 0;
+
+                const ContractCost =
+                        parseFloatSafe(row.ContractCost) || 0;
+
+                const StartDate =
+                        parseDateSafe(row.StartDate) || defaultStart;
+
+                const ActualCompletionDate =
+                        parseDateSafe(row.ActualCompletionDate) || defaultCompletion;
+
+                const Region = row.Region?.trim() || "Unknown";
+                const MainIsland = row.MainIsland?.trim() || "Unknown";
+                const Contractor = row.Contractor?.trim() || "Unknown Contractor";
+                const TypeOfWork = row.TypeOfWork?.trim() || "Unspecified";
+
+                const CostSavings = ApprovedBudgetForContract - ContractCost;
+                const CompletionDelayDays = ActualCompletionDate.diff(StartDate, "day");
+
+                cleaned.push({
+                        row,
+                        ApprovedBudgetForContract,
+                        ContractCost,
+                        StartDate,
+                        ActualCompletionDate,
+                        FundingYear,
+                        Region,
+                        MainIsland,
+                        Contractor,
+                        TypeOfWork,
+                        CostSavings,
+                        CompletionDelayDays,
+                });
+        }
+
+        return cleaned;
 }
 
 /** generateReport1: Generate Regional Flood Mitigation Efficiency Summary
@@ -289,50 +305,50 @@ function generateSummary(data, contractors, regions) {
  * @returns void
  */
 async function previewFile(filePath, lines = 5, reportTitle = "", filterNote = "", reportNumber) {
-    try {
-        if (!fs.existsSync(filePath)) {
-            console.log(`File not found: ${filePath}`);
-            return;
+        try {
+                if (!fs.existsSync(filePath)) {
+                        console.log(`File not found: ${filePath}`);
+                        return;
+                }
+
+                console.log(`\nReport ${reportNumber}: ${reportTitle}`);
+                console.log(`${reportTitle}`);
+                if (filterNote) console.log(`(${filterNote})`);
+                console.log("");
+
+                const results = [];
+                await new Promise((resolve, reject) => {
+                        fs.createReadStream(filePath)
+                                .pipe(csv())
+                                .on("data", (data) => {
+                                        if (results.length < lines) results.push(data);
+                                })
+                                .on("end", resolve)
+                                .on("error", reject);
+                });
+
+                if (results.length === 0) {
+                        console.log(`No data to preview in ${filePath}`);
+                        return;
+                }
+
+                const headers = Object.keys(results[0]);
+
+                const colWidths = headers.map(h => Math.max(h.length, ...results.map(r => (r[h] ? r[h].toString().length : 0))) + 2);
+
+                const headerRow = headers.map((h, i) => h.padEnd(colWidths[i])).join(" | ");
+                console.log(headerRow);
+                console.log("-".repeat(headerRow.length));
+
+                for (const r of results) {
+                        const rowStr = headers.map((h, i) => (r[h] ? r[h].toString().padEnd(colWidths[i]) : " ".repeat(colWidths[i]))).join(" | ");
+                        console.log(rowStr);
+                }
+
+                console.log("");
+        } catch (err) {
+                console.error(`Error previewing ${filePath}:`, err);
         }
-
-        console.log(`\nReport ${reportNumber}: ${reportTitle}`);
-        console.log(`${reportTitle}`);
-        if (filterNote) console.log(`(${filterNote})`);
-        console.log("");
-
-        const results = [];
-        await new Promise((resolve, reject) => {
-            fs.createReadStream(filePath)
-                .pipe(csv())
-                .on("data", (data) => {
-                    if (results.length < lines) results.push(data);
-                })
-                .on("end", resolve)
-                .on("error", reject);
-        });
-
-        if (results.length === 0) {
-            console.log(`No data to preview in ${filePath}`);
-            return;
-        }
-
-        const headers = Object.keys(results[0]);
-
-        const colWidths = headers.map(h => Math.max(h.length, ...results.map(r => (r[h] ? r[h].toString().length : 0))) + 2);
-
-        const headerRow = headers.map((h, i) => h.padEnd(colWidths[i])).join(" | ");
-        console.log(headerRow);
-        console.log("-".repeat(headerRow.length));
-
-        for (const r of results) {
-            const rowStr = headers.map((h, i) => (r[h] ? r[h].toString().padEnd(colWidths[i]) : " ".repeat(colWidths[i]))).join(" | ");
-            console.log(rowStr);
-        }
-
-        console.log("");
-    } catch (err) {
-        console.error(`Error previewing ${filePath}:`, err);
-    }
 }
 
 
@@ -414,8 +430,13 @@ async function generateReports() {
         console.log(`Summary Stats (${summaryFile})`);
 
         const summaryData = JSON.parse(fs.readFileSync(summaryFile, "utf8"));
+
         console.log("\nSummary Preview:");
-        console.table(summaryData);
+        console.log(JSON.stringify({
+                global_avg_delay: formatNumber(parseFloat(summaryData.avgGlobalDelay.replace(/,/g, ""))),
+                total_savings: formatNumber(parseFloat(summaryData.totalSavings.replace(/,/g, ""))),
+        }, null, 0));
+
 }
 
 /** reportSelection: Prompt user to return to report selection or exit
