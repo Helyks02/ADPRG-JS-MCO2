@@ -104,7 +104,6 @@ async function loadCSV(filePath) {
 function cleanAndPrepareData(rawRows) {
 
         const defaultStart = dayjs("2021-01-01");
-        const defaultCompletion = dayjs("2021-12-31");
 
         const cleaned = [];
 
@@ -120,11 +119,18 @@ function cleanAndPrepareData(rawRows) {
                 const ContractCost =
                         parseFloatSafe(row.ContractCost) || 0;
 
-                const StartDate =
-                        parseDateSafe(row.StartDate) || defaultStart;
+                const StartDate = parseDateSafe(row.StartDate)
 
-                const ActualCompletionDate =
-                        parseDateSafe(row.ActualCompletionDate) || defaultCompletion;
+                if (parseDateSafe(row.StartDate) === null) {
+                        StartDate = defaultStart;
+                }
+
+
+                const ActualCompletionDate = parseDateSafe(row.ActualCompletionDate);
+
+                if (parseDateSafe(row.ActualCompletionDate) === null) {
+                        ActualCompletionDate = StartDate;
+                }
 
                 const Region = row.Region?.trim() || "Unknown";
                 const MainIsland = row.MainIsland?.trim() || "Unknown";
