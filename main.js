@@ -103,8 +103,6 @@ async function loadCSV(filePath) {
 /** cleanAndPrepareData: Clean, impute, and prepare raw CSV data */
 function cleanAndPrepareData(rawRows) {
 
-        const defaultStart = dayjs("2021-01-01");
-
         const cleaned = [];
 
         for (const row of rawRows) {
@@ -113,22 +111,21 @@ function cleanAndPrepareData(rawRows) {
                 if (!FundingYear || FundingYear < 2021 || FundingYear > 2023)
                         continue;
 
-                const ApprovedBudgetForContract =
-                        parseFloatSafe(row.ApprovedBudgetForContract) || 0;
-
-                const ContractCost =
-                        parseFloatSafe(row.ContractCost) || 0;
-
-                const StartDate = parseDateSafe(row.StartDate)
-
-                if (parseDateSafe(row.StartDate) === null) {
-                        StartDate = defaultStart;
+                const ApprovedBudgetForContract = parseFloatSafe(row.ApprovedBudgetForContract);
+                if (ApprovedBudgetForContract === null || ApprovedBudgetForContract <= 0) {
+                        continue;
                 }
 
+                const ContractCost = parseFloatSafe(row.ContractCost);
+                if (ContractCost === null || ContractCost <= 0) {
+                        continue;
+                }
+
+                const StartDate = parseDateSafe(row.StartDate);
 
                 const ActualCompletionDate = parseDateSafe(row.ActualCompletionDate);
 
-                if (parseDateSafe(row.ActualCompletionDate) === null) {
+                if (ActualCompletionDate === null || ActualCompletionDate === "") {
                         ActualCompletionDate = StartDate;
                 }
 
