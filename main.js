@@ -63,9 +63,20 @@ function median(arr) {
  * @returns average value
  */
 function average(arr) {
-        const avg = arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+        if (!arr.length) return 0;
 
-        return avg;
+        let sum = 0;
+        let count = 0;
+
+        for (const x of arr) {
+                const num = Number(x);
+                if (!isNaN(num)) {
+                        sum += num;
+                        count++;
+                }
+        }
+
+        return count ? sum / count : 0;
 }
 
 /** formatNumber: Format a number with commas and fixed decimal places
@@ -181,9 +192,9 @@ function generateReport1(data) {
         const results = Object.values(regionMap).map((grp) => {
                 const avgDelay = average(grp.delays);
                 const delayOver30 = (grp.delays.filter((d) => d > 30).length / grp.delays.length) * 100;
-                let efficiency = (median(grp.savings) / avgDelay) * 100;
+                let efficiency = median(grp.savings) / avgDelay;
+
                 if (!isFinite(efficiency) || efficiency < 0) efficiency = 0;
-                efficiency = Math.min(100, Math.max(0, efficiency));
 
                 return {
                         Region: grp.Region,
@@ -192,14 +203,29 @@ function generateReport1(data) {
                         MedianCostSavings: formatNumber(median(grp.savings)),
                         AvgCompletionDelayDays: formatNumber(avgDelay, 2),
                         DelayOver30Percent: formatNumber(delayOver30, 2),
-                        EfficiencyScore: formatNumber(efficiency, 2),
+                        EfficiencyScore: efficiency
                 };
+        });
 
+
+        const efficiencies = results.map(r => r.EfficiencyScore);
+        const minEff = Math.min(...efficiencies);
+        const maxEff = Math.max(...efficiencies);
+
+        results.forEach(r => {
+                if (isFinite(r.EfficiencyScore) && maxEff !== minEff) {
+                        r.EfficiencyScore = ((r.EfficiencyScore - minEff) / (maxEff - minEff)) * 100;
+                } else {
+                        r.EfficiencyScore = 0;
+                }
+                r.EfficiencyScore = Number(r.EfficiencyScore.toFixed(2));
         });
 
         results.sort((a, b) => b.EfficiencyScore - a.EfficiencyScore);
+
         return results;
 }
+
 
 /** generateReport2: Generate Top Contractors Performance Summary
  * @param {Array} data 
@@ -208,17 +234,25 @@ function generateReport1(data) {
 function generateReport2(data) {
         const contractorMap = {};
 
+        // Group and aggregate by contractor
         for (const r of data) {
                 if (!r.Contractor) continue;
                 const key = r.Contractor;
                 if (!contractorMap[key])
-                        contractorMap[key] = { Contractor: key, projects: 0, delays: [], totalSavings: 0, totalCost: 0 };
+                        contractorMap[key] = {
+                                Contractor: key,
+                                projects: 0,
+                                delays: [],
+                                totalSavings: 0,
+                                totalCost: 0
+                        };
                 contractorMap[key].projects++;
                 contractorMap[key].delays.push(r.CompletionDelayDays);
                 contractorMap[key].totalSavings += r.CostSavings;
                 contractorMap[key].totalCost += r.ContractCost;
         }
 
+        // Filter, compute metrics, and prepare for sorting
         const results = Object.values(contractorMap)
                 .filter((c) => c.projects >= 5)
                 .map((c) => {
@@ -228,16 +262,21 @@ function generateReport2(data) {
                         reliability = Math.min(100, Math.max(0, reliability));
                         return {
                                 Contractor: c.Contractor,
-                                Projects: c.projects,
-                                AvgDelay: formatNumber(avgDelay),
-                                TotalCostSavings: formatNumber(c.totalSavings),
-                                ReliabilityIndex: formatNumber(reliability),
-                                RiskFlag: reliability < 50 ? "High Risk" : "OK",
+                                TotalCost: formatNumber(c.totalCost),
+                                NumProjects: c.projects,
+                                AvgDelay: formatNumber(avgDelay, 2),
+                                TotalSavings: formatNumber(c.totalSavings),
+                                ReliabilityIndex: formatNumber(reliability, 2),
+                                RiskFlag: reliability < 50 ? "High Risk" : "Low Risk",
+                                _rawTotalCost: c.totalCost
                         };
-
                 })
-                .sort((a, b) => b.TotalCostSavings - a.TotalCostSavings)
-                .slice(0, 15);
+                .sort((a, b) => b._rawTotalCost - a._rawTotalCost)
+                .slice(0, 15)
+                .map(c => {
+                        delete c._rawTotalCost;
+                        return c;
+                });
 
         return results;
 }
@@ -247,41 +286,68 @@ function generateReport2(data) {
  * @returns report array
  */
 function generateReport3(data) {
-        const typeMap = {};
+    const typeMap = {};
 
-        for (const r of data) {
-                const key = `${r.FundingYear}|${r.TypeOfWork}`;
-                if (!typeMap[key])
-                        typeMap[key] = { FundingYear: r.FundingYear, TypeOfWork: r.TypeOfWork, savings: [] };
-                typeMap[key].savings.push(r.CostSavings);
+    for (const r of data) {
+        const key = `${r.FundingYear}|${r.TypeOfWork}`;
+        if (!typeMap[key]) {
+            typeMap[key] = {
+                FundingYear: r.FundingYear,
+                TypeOfWork: r.TypeOfWork,
+                savings: []
+            };
         }
+        typeMap[key].savings.push(r.CostSavings);
+    }
 
-        const avgSavingsByYear = {};
-        const results = Object.values(typeMap).map((grp) => {
-                const avgSavings = average(grp.savings);
-                avgSavingsByYear[grp.FundingYear] = avgSavingsByYear[grp.FundingYear] || [];
-                avgSavingsByYear[grp.FundingYear].push(avgSavings);
-                const overrunRate = (grp.savings.filter((s) => s < 0).length / grp.savings.length) * 100;
-                return {
-                        FundingYear: grp.FundingYear,
-                        TypeOfWork: grp.TypeOfWork,
-                        TotalProjects: grp.savings.length,
-                        AvgCostSavings: formatNumber(avgSavings),
-                        OverrunRate: formatNumber(overrunRate),
-                };
+    const yearTotals = {};
+    const yearCounts = {};
 
-        });
+    const results = Object.values(typeMap).map((grp) => {
+        const totalProjects = grp.savings.length;
+        const avgSavings = average(grp.savings);
 
-        const baseline = average(avgSavingsByYear[2021] || [0]);
-        results.forEach((r) => {
-                const yearAvg = average(avgSavingsByYear[r.FundingYear]);
-                const change = r.FundingYear === 2021 ? 0 : ((yearAvg - baseline) / Math.abs(baseline || 1)) * 100;
-                r.YoYChangePercent = change.toFixed(2);
-        });
+        const year = Number(grp.FundingYear);
+        yearTotals[year] = (yearTotals[year] || 0) + grp.savings.reduce((a, b) => a + b, 0);
+        yearCounts[year] = (yearCounts[year] || 0) + grp.savings.length;
 
-        results.sort((a, b) => a.FundingYear - b.FundingYear || b.AvgCostSavings - a.AvgCostSavings);
-        return results;
+        const overrunRate = grp.savings.length ? (grp.savings.filter((s) => s < 0).length / grp.savings.length) * 100 : 0;
+
+        return {
+            FundingYear: year,
+            TypeOfWork: grp.TypeOfWork,
+            TotalProjects: totalProjects,
+            AvgCostSavings: formatNumber(avgSavings),
+            _rawAvgSavings: avgSavings,
+            OverrunRate: formatNumber(overrunRate),
+        };
+    });
+
+    const weightedYearAvg = {};
+    for (const yearStr in yearTotals) {
+        const year = Number(yearStr);
+        weightedYearAvg[year] = yearTotals[year] / yearCounts[year];
+    }
+
+    const baseline = weightedYearAvg[2021] || 0;
+
+    results.forEach((r) => {
+        const yearAvg = weightedYearAvg[r.FundingYear] || 0;
+        const change = r.FundingYear === 2021 ? 0 : ((yearAvg - baseline) / Math.abs(baseline || 1)) * 100;
+        r.YoYChange = change.toFixed(2);
+    });
+
+    results.sort((a, b) => {
+        if (a.FundingYear !== b.FundingYear) return a.FundingYear - b.FundingYear;
+        return b._rawAvgSavings - a._rawAvgSavings;
+    });
+
+    results.forEach(r => delete r._rawAvgSavings);
+
+    return results;
 }
+
+
 
 /** generateSummary: Generate summary statistics
  * @param {Array} data 
@@ -391,7 +457,7 @@ async function generateReports() {
         await writeCSV(file1, report1);
         await previewFile(
                 file1,
-                3,
+                2,
                 "Regional Flood Mitigation Efficiency Summary",
                 "Filtered: Projects from 2021–2023 only",
                 1
@@ -403,7 +469,7 @@ async function generateReports() {
         await writeCSV(file2, report2);
         await previewFile(
                 file2,
-                3,
+                2,
                 "Top Contractors Performance Summary",
                 "Top 15 by TotalCost, >= 5 Projects",
                 2
@@ -415,7 +481,7 @@ async function generateReports() {
         await writeCSV(file3, report3);
         await previewFile(
                 file3,
-                4,
+                3,
                 "Cost Savings Trends by Funding Year and Type of Work",
                 "Grouped by FundingYear & TypeOfWork",
                 3
@@ -469,6 +535,7 @@ async function main() {
         console.log("Select Language Implementation:");
         console.log("1. Load the File");
         console.log("2. Generate Reports");
+        console.log("");
 
         let choice = parseInt(scan.question("Enter choice: "));
 
@@ -477,6 +544,7 @@ async function main() {
                         const rows = await loadCSV(INPUT_FILE);
                         const cleaned = cleanAndPrepareData(rows);
                         console.log(`Processing dataset... (${rows.length} rows loaded, ${cleaned.length} filtered for 2021-2023)`);
+                        console.log("");
 
                         loadedData = cleaned;
 
