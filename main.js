@@ -51,10 +51,14 @@ function parseDateSafe(v) {
 function median(arr) {
         if (!arr.length) return 0;
 
+        //... is a spread operator to create a shallow copy of the array
         const s = [...arr].sort((a, b) => a - b);
+        // Find the middle index
         const mid = Math.floor(s.length / 2);
+        // Calculate median based on even or odd length
         const median = s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 
+        // Return median rounded to 2 decimal places
         return Number(median.toFixed(2));
 }
 
@@ -63,19 +67,24 @@ function median(arr) {
  * @returns average value
  */
 function average(arr) {
+        // Return 0 for empty array
         if (!arr.length) return 0;
 
+        // Sum valid numbers and count them
         let sum = 0;
         let count = 0;
 
+        // Iterate through array
         for (const x of arr) {
+                // Convert to number
                 const num = Number(x);
+                // If valid, add to sum and increment count
                 if (!isNaN(num)) {
                         sum += num;
                         count++;
                 }
         }
-
+        // Return average or 0 if no valid numbers
         return count ? sum / count : 0;
 }
 
@@ -85,7 +94,9 @@ function average(arr) {
  * @returns formatted string
  */
 function formatNumber(n, decimals = 2) {
+        // Handle NaN case
         if (isNaN(n)) return "0.00";
+        // Format number with specified decimal places
         return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
@@ -94,8 +105,11 @@ function formatNumber(n, decimals = 2) {
  * @returns Promise resolving to array of rows
  */
 async function loadCSV(filePath) {
+        // Return a promise that resolves when the file is fully read
         return new Promise((resolve, reject) => {
+                // Array to hold rows
                 const rows = [];
+                // Create read stream and parse CSV
                 fs.createReadStream(filePath)
                         .pipe(csv())
                         .on("data", (row) => rows.push(row))
@@ -113,41 +127,52 @@ async function loadCSV(filePath) {
  */
 /** cleanAndPrepareData: Clean, impute, and prepare raw CSV data */
 function cleanAndPrepareData(rawRows) {
-
+        // Array to hold cleaned data
         const cleaned = [];
 
+        // Iterate through each raw row
         for (const row of rawRows) {
 
+                // Parse and validate FundingYear
                 const FundingYear = parseInt(row.FundingYear);
                 if (!FundingYear || FundingYear < 2021 || FundingYear > 2023)
                         continue;
 
+                // Parse and validate ApprovedBudgetForContract
                 const ApprovedBudgetForContract = parseFloatSafe(row.ApprovedBudgetForContract);
                 if (ApprovedBudgetForContract === null || ApprovedBudgetForContract <= 0) {
                         continue;
                 }
 
+                // Parse and validate ContractCost
                 const ContractCost = parseFloatSafe(row.ContractCost);
                 if (ContractCost === null || ContractCost <= 0) {
                         continue;
                 }
 
+                // Parse StartDate
                 const StartDate = parseDateSafe(row.StartDate);
 
+                // Parse ActualCompletionDate
                 const ActualCompletionDate = parseDateSafe(row.ActualCompletionDate);
 
+                // Impute missing ActualCompletionDate with StartDate
                 if (ActualCompletionDate === null || ActualCompletionDate === "") {
                         ActualCompletionDate = StartDate;
                 }
 
+                // ?.trim() to remove leading/trailing whitespace, and if null/undefined,
+                // default to "Unknown" or appropriate placeholder
                 const Region = row.Region?.trim() || "Unknown";
                 const MainIsland = row.MainIsland?.trim() || "Unknown";
                 const Contractor = row.Contractor?.trim() || "Unknown Contractor";
                 const TypeOfWork = row.TypeOfWork?.trim() || "Unspecified";
 
+                // Calculate CostSavings and CompletionDelayDays
                 const CostSavings = ApprovedBudgetForContract - ContractCost;
                 const CompletionDelayDays = ActualCompletionDate.diff(StartDate, "day");
 
+                // Push cleaned and computed data to array
                 cleaned.push({
                         row,
                         ApprovedBudgetForContract,
@@ -164,6 +189,7 @@ function cleanAndPrepareData(rawRows) {
                 });
         }
 
+        // Return cleaned data array
         return cleaned;
 }
 
@@ -172,10 +198,16 @@ function cleanAndPrepareData(rawRows) {
  * @returns report array
  */
 function generateReport1(data) {
+        // Group data by Region and MainIsland
         const regionMap = {};
 
+        // Aggregate metrics for each region
         for (const r of data) {
+
+                // Create unique key for region and main island
                 const key = `${r.Region}|${r.MainIsland}`;
+
+                // Initialize region entry if not exists
                 if (!regionMap[key])
                         regionMap[key] = {
                                 Region: r.Region,
@@ -184,18 +216,25 @@ function generateReport1(data) {
                                 savings: [],
                                 delays: [],
                         };
+
+                // Aggregate metrics
                 regionMap[key].budgets.push(r.ApprovedBudgetForContract);
                 regionMap[key].savings.push(r.CostSavings);
                 regionMap[key].delays.push(r.CompletionDelayDays);
         }
 
+        // Compute final metrics for each region
         const results = Object.values(regionMap).map((grp) => {
+
+                // Calculate average delay, delay over 30 days percentage, and efficiency score
                 const avgDelay = average(grp.delays);
                 const delayOver30 = (grp.delays.filter((d) => d > 30).length / grp.delays.length) * 100;
                 let efficiency = median(grp.savings) / avgDelay;
 
+                // Handle edge cases for efficiency score
                 if (!isFinite(efficiency) || efficiency < 0) efficiency = 0;
 
+                // Return formatted result object
                 return {
                         Region: grp.Region,
                         MainIsland: grp.MainIsland,
@@ -207,11 +246,12 @@ function generateReport1(data) {
                 };
         });
 
-
+        // Normalize EfficiencyScore to 0-100 scale
         const efficiencies = results.map(r => r.EfficiencyScore);
         const minEff = Math.min(...efficiencies);
         const maxEff = Math.max(...efficiencies);
 
+        // Adjust EfficiencyScore for each region
         results.forEach(r => {
                 if (isFinite(r.EfficiencyScore) && maxEff !== minEff) {
                         r.EfficiencyScore = ((r.EfficiencyScore - minEff) / (maxEff - minEff)) * 100;
@@ -221,8 +261,10 @@ function generateReport1(data) {
                 r.EfficiencyScore = Number(r.EfficiencyScore.toFixed(2));
         });
 
+        // Sort results by EfficiencyScore in descending order
         results.sort((a, b) => b.EfficiencyScore - a.EfficiencyScore);
 
+        // Return final results
         return results;
 }
 
@@ -232,12 +274,19 @@ function generateReport1(data) {
  * @returns report array
  */
 function generateReport2(data) {
+        // Map to hold aggregated data by contractor
         const contractorMap = {};
 
         // Group and aggregate by contractor
         for (const r of data) {
+
+                // Skip if Contractor is missing
                 if (!r.Contractor) continue;
+
+                // Initialize contractor entry if not exists
                 const key = r.Contractor;
+
+                // Create entry if not exists
                 if (!contractorMap[key])
                         contractorMap[key] = {
                                 Contractor: key,
@@ -246,6 +295,8 @@ function generateReport2(data) {
                                 totalSavings: 0,
                                 totalCost: 0
                         };
+
+                // Aggregate metrics
                 contractorMap[key].projects++;
                 contractorMap[key].delays.push(r.CompletionDelayDays);
                 contractorMap[key].totalSavings += r.CostSavings;
@@ -254,12 +305,26 @@ function generateReport2(data) {
 
         // Filter, compute metrics, and prepare for sorting
         const results = Object.values(contractorMap)
+
+                // Only include contractors with at least 5 projects
                 .filter((c) => c.projects >= 5)
+
+                // Compute reliability index and format results
                 .map((c) => {
+
+                        // Calculate average delay
                         const avgDelay = average(c.delays);
+
+                        // Calculate reliability index
                         let reliability = (1 - (avgDelay / 90)) * (c.totalSavings / c.totalCost) * 100;
+
+                        // Handle edge cases for reliability index
                         if (!isFinite(reliability)) reliability = 0;
+
+                        // Cap reliability at 100
                         reliability = Math.min(100, reliability);
+
+                        // Return formatted result object
                         return {
                                 Contractor: c.Contractor,
                                 TotalCost: formatNumber(c.totalCost),
@@ -271,13 +336,18 @@ function generateReport2(data) {
                                 _rawTotalCost: c.totalCost
                         };
                 })
+
+                // Sort by TotalCost in descending order and take top 15
                 .sort((a, b) => b._rawTotalCost - a._rawTotalCost)
                 .slice(0, 15)
+
+                // Clean up temporary fields
                 .map(c => {
                         delete c._rawTotalCost;
                         return c;
                 });
 
+        // Return final results
         return results;
 }
 
@@ -286,10 +356,16 @@ function generateReport2(data) {
  * @returns report array
  */
 function generateReport3(data) {
+
         const typeMap = {};
 
+        // Aggregate savings for each group
         for (const r of data) {
+
+                // Create unique key for FundingYear and TypeOfWork
                 const key = `${r.FundingYear}|${r.TypeOfWork}`;
+
+                // Initialize group entry if not exists
                 if (!typeMap[key]) {
                         typeMap[key] = {
                                 FundingYear: r.FundingYear,
@@ -297,22 +373,32 @@ function generateReport3(data) {
                                 savings: []
                         };
                 }
+
+                // Aggregate CostSavings
                 typeMap[key].savings.push(r.CostSavings);
         }
 
         const yearTotals = {};
         const yearCounts = {};
 
+        // Compute final metrics for each group
         const results = Object.values(typeMap).map((grp) => {
+
+                // Calculate total projects and average savings
                 const totalProjects = grp.savings.length;
+
+                // Calculate average savings
                 const avgSavings = average(grp.savings);
 
+                // Accumulate totals for weighted average calculation
                 const year = Number(grp.FundingYear);
                 yearTotals[year] = (yearTotals[year] || 0) + grp.savings.reduce((a, b) => a + b, 0);
                 yearCounts[year] = (yearCounts[year] || 0) + grp.savings.length;
 
+                // Calculate overrun rate
                 const overrunRate = grp.savings.length ? (grp.savings.filter((s) => s < 0).length / grp.savings.length) * 100 : 0;
 
+                // Return formatted result object
                 return {
                         FundingYear: year,
                         TypeOfWork: grp.TypeOfWork,
@@ -323,27 +409,33 @@ function generateReport3(data) {
                 };
         });
 
+        // Calculate weighted average savings per year
         const weightedYearAvg = {};
         for (const yearStr in yearTotals) {
                 const year = Number(yearStr);
                 weightedYearAvg[year] = yearTotals[year] / yearCounts[year];
         }
 
+        // Calculate Year-over-Year change compared to 2021 baseline
         const baseline = weightedYearAvg[2021] || 0;
 
+        // Add YoYChange to each result
         results.forEach((r) => {
                 const yearAvg = weightedYearAvg[r.FundingYear] || 0;
                 const change = r.FundingYear === 2021 ? 0 : ((yearAvg - baseline) / Math.abs(baseline || 1)) * 100;
                 r.YoYChange = change.toFixed(2);
         });
 
+        // Sort results by FundingYear ascending, then AvgCostSavings descending
         results.sort((a, b) => {
                 if (a.FundingYear !== b.FundingYear) return a.FundingYear - b.FundingYear;
                 return b._rawAvgSavings - a._rawAvgSavings;
         });
 
+        // Clean up temporary fields
         results.forEach(r => delete r._rawAvgSavings);
 
+        // Return final results
         return results;
 }
 
@@ -356,6 +448,7 @@ function generateReport3(data) {
  * @returns summary object
  */
 function generateSummary(data, contractors, regions) {
+        // Calculate average global delay
         return {
                 totalProjects: data.length,
                 totalContractors: Object.keys(contractors).length,
@@ -373,19 +466,29 @@ function generateSummary(data, contractors, regions) {
  * @param {number} reportNumber
  * @returns void
  */
-async function previewFile(filePath, lines = 5, reportTitle = "", filterNote = "", reportNumber) {
+async function previewFile(filePath, lines, reportTitle = "", filterNote = "", reportNumber) {
+
+        // Read and preview the first few lines of the CSV file
         try {
+
+                // Check if file exists
                 if (!fs.existsSync(filePath)) {
                         console.log(`File not found: ${filePath}`);
                         return;
                 }
 
+                // Print report header
                 console.log(`\nReport ${reportNumber}: ${reportTitle}`);
+
+                // Print filter note if provided
                 console.log(`${reportTitle}`);
                 if (filterNote) console.log(`(${filterNote})`);
                 console.log("");
 
+                // Read the CSV file and collect the first few lines
                 const results = [];
+
+                // Read CSV and collect lines
                 await new Promise((resolve, reject) => {
                         fs.createReadStream(filePath)
                                 .pipe(csv())
@@ -396,25 +499,28 @@ async function previewFile(filePath, lines = 5, reportTitle = "", filterNote = "
                                 .on("error", reject);
                 });
 
+                // If no data, print message
                 if (results.length === 0) {
                         console.log(`No data to preview in ${filePath}`);
                         return;
                 }
 
+                // Determine column widths for formatting
                 const headers = Object.keys(results[0]);
-
                 const colWidths = headers.map(h => Math.max(h.length, ...results.map(r => (r[h] ? r[h].toString().length : 0))) + 2);
 
+                // Print header row
                 const headerRow = headers.map((h, i) => h.padEnd(colWidths[i])).join(" | ");
                 console.log(headerRow);
                 console.log("-".repeat(headerRow.length));
 
+                // Print data rows
                 for (const r of results) {
                         const rowStr = headers.map((h, i) => (r[h] ? r[h].toString().padEnd(colWidths[i]) : " ".repeat(colWidths[i]))).join(" | ");
                         console.log(rowStr);
                 }
-
                 console.log("");
+
         } catch (err) {
                 console.error(`Error previewing ${filePath}:`, err);
         }
@@ -427,11 +533,19 @@ async function previewFile(filePath, lines = 5, reportTitle = "", filterNote = "
  * @returns Promise<void>
  */
 async function writeCSV(filename, rows) {
+
+        // Write rows to CSV file
         const ws = fs.createWriteStream(filename);
+
+        // Use fast-csv to write CSV with headers
         const csvStream = format({ headers: true });
         csvStream.pipe(ws);
+
+        // Write each row
         for (const row of rows) csvStream.write(row);
         csvStream.end();
+
+        // Wait for the stream to finish
         await new Promise((resolve) => ws.on("finish", resolve));
 }
 
@@ -439,19 +553,25 @@ async function writeCSV(filename, rows) {
  * @returns void
  */
 async function generateReports() {
+
+        // Ensure data is loaded
         if (!loadedData) {
                 console.log("Error: No data loaded. Please load the CSV file first (option 1).");
                 return;
         }
 
+        // Generate each report
+        console.log("");
         console.log("Generating reports...");
 
+        // Clean and prepare data
         const data = cleanAndPrepareData(loadedData);
         if (!data.length) {
                 console.log("No valid data after cleaning. Please check your CSV file.");
                 return;
         }
 
+        // Report 1: Regional Flood Mitigation Efficiency Summary
         const report1 = generateReport1(data);
         const file1 = "report1_regional_summary.csv";
         await writeCSV(file1, report1);
@@ -464,6 +584,7 @@ async function generateReports() {
         );
         console.log(`(Full table exported to ${file1})`);
 
+        // Report 2: Top Contractors Performance Summary
         const report2 = generateReport2(data);
         const file2 = "report2_contractor_ranking.csv";
         await writeCSV(file2, report2);
@@ -476,6 +597,7 @@ async function generateReports() {
         );
         console.log(`(Full table exported to ${file2})`);
 
+        // Report 3: Cost Savings Trends by Funding Year and Type of Work
         const report3 = generateReport3(data);
         const file3 = "report3_cost_trends.csv";
         await writeCSV(file3, report3);
@@ -488,18 +610,22 @@ async function generateReports() {
         );
         console.log(`(Full table exported to ${file3})`);
 
+        // Summary Stats
         const summary = generateSummary(
                 data,
                 Object.fromEntries(report2.map((r) => [r.Contractor, r])),
                 Object.fromEntries(report1.map((r) => [r.Region, r]))
         );
 
+        // Write summary to JSON file
         const summaryFile = "summary.json";
         fs.writeFileSync(summaryFile, JSON.stringify(summary, null, 2));
         console.log(`Summary Stats (${summaryFile})`);
 
+        // Read and display summary preview
         const summaryData = JSON.parse(fs.readFileSync(summaryFile, "utf8"));
 
+        // Display summary preview
         console.log("\nSummary Preview:");
         console.log(JSON.stringify({
                 global_avg_delay: formatNumber(parseFloat(summaryData.avgGlobalDelay.replace(/,/g, ""))),
@@ -512,12 +638,16 @@ async function generateReports() {
  * @returns void
  */
 function reportSelection() {
+        // Prompt user to return to main menu or exit
         let choice;
+
+        // Loop until valid input
         while (true) {
 
                 choice = scan.question("Back to Report Selection (Y/N): ");
                 choice = choice.toUpperCase();
 
+                // Handle user choice
                 if (choice === 'Y') {
                         main();
                         break;
@@ -534,33 +664,49 @@ function reportSelection() {
  * @returns void
  */
 async function main() {
+        // Display menu and handle user choices
         console.log("Select Language Implementation:");
-        console.log("1. Load the File");
-        console.log("2. Generate Reports");
+        console.log("[1] Load the File");
+        console.log("[2] Generate Reports");
         console.log("");
 
         let choice;
 
+        // Loop until valid input
         while (true) {
                 choice = parseInt(scan.question("Enter choice: "));
 
+                // Handle user choice
+                // 1: Load file, 2: Generate reports
                 if (choice === 1) {
                         try {
+                                // Load and clean data
                                 const rows = await loadCSV(INPUT_FILE);
                                 const cleaned = cleanAndPrepareData(rows);
                                 console.log(`Processing dataset... (${rows.length} rows loaded, ${cleaned.length} filtered for 2021-2023)`);
                                 console.log("");
 
+                                // Update global loadedData with cleaned data
                                 loadedData = cleaned;
 
+                                // Restart main menu
                                 await main();
+
+                                // Break the loop to avoid duplicate prompts
                                 break;
+
                         } catch (err) {
                                 console.error("Error loading file:", err);
                         }
                 } else if (choice === 2) {
+
+                        // Generate reports
                         await generateReports();
+
+                        // Prompt for next action
                         reportSelection();
+
+                        // Break the loop to avoid duplicate prompts
                         break;
                 } else {
                         console.log("Invalid choice. Please enter 1 or 2.");
