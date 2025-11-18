@@ -259,7 +259,7 @@ function generateReport2(data) {
                         const avgDelay = average(c.delays);
                         let reliability = (1 - (avgDelay / 90)) * (c.totalSavings / c.totalCost) * 100;
                         if (!isFinite(reliability)) reliability = 0;
-                        reliability = Math.min(100, Math.max(0, reliability));
+                        reliability = Math.min(100, reliability);
                         return {
                                 Contractor: c.Contractor,
                                 TotalCost: formatNumber(c.totalCost),
@@ -286,65 +286,65 @@ function generateReport2(data) {
  * @returns report array
  */
 function generateReport3(data) {
-    const typeMap = {};
+        const typeMap = {};
 
-    for (const r of data) {
-        const key = `${r.FundingYear}|${r.TypeOfWork}`;
-        if (!typeMap[key]) {
-            typeMap[key] = {
-                FundingYear: r.FundingYear,
-                TypeOfWork: r.TypeOfWork,
-                savings: []
-            };
+        for (const r of data) {
+                const key = `${r.FundingYear}|${r.TypeOfWork}`;
+                if (!typeMap[key]) {
+                        typeMap[key] = {
+                                FundingYear: r.FundingYear,
+                                TypeOfWork: r.TypeOfWork,
+                                savings: []
+                        };
+                }
+                typeMap[key].savings.push(r.CostSavings);
         }
-        typeMap[key].savings.push(r.CostSavings);
-    }
 
-    const yearTotals = {};
-    const yearCounts = {};
+        const yearTotals = {};
+        const yearCounts = {};
 
-    const results = Object.values(typeMap).map((grp) => {
-        const totalProjects = grp.savings.length;
-        const avgSavings = average(grp.savings);
+        const results = Object.values(typeMap).map((grp) => {
+                const totalProjects = grp.savings.length;
+                const avgSavings = average(grp.savings);
 
-        const year = Number(grp.FundingYear);
-        yearTotals[year] = (yearTotals[year] || 0) + grp.savings.reduce((a, b) => a + b, 0);
-        yearCounts[year] = (yearCounts[year] || 0) + grp.savings.length;
+                const year = Number(grp.FundingYear);
+                yearTotals[year] = (yearTotals[year] || 0) + grp.savings.reduce((a, b) => a + b, 0);
+                yearCounts[year] = (yearCounts[year] || 0) + grp.savings.length;
 
-        const overrunRate = grp.savings.length ? (grp.savings.filter((s) => s < 0).length / grp.savings.length) * 100 : 0;
+                const overrunRate = grp.savings.length ? (grp.savings.filter((s) => s < 0).length / grp.savings.length) * 100 : 0;
 
-        return {
-            FundingYear: year,
-            TypeOfWork: grp.TypeOfWork,
-            TotalProjects: totalProjects,
-            AvgCostSavings: formatNumber(avgSavings),
-            _rawAvgSavings: avgSavings,
-            OverrunRate: formatNumber(overrunRate),
-        };
-    });
+                return {
+                        FundingYear: year,
+                        TypeOfWork: grp.TypeOfWork,
+                        TotalProjects: totalProjects,
+                        AvgCostSavings: formatNumber(avgSavings),
+                        _rawAvgSavings: avgSavings,
+                        OverrunRate: formatNumber(overrunRate),
+                };
+        });
 
-    const weightedYearAvg = {};
-    for (const yearStr in yearTotals) {
-        const year = Number(yearStr);
-        weightedYearAvg[year] = yearTotals[year] / yearCounts[year];
-    }
+        const weightedYearAvg = {};
+        for (const yearStr in yearTotals) {
+                const year = Number(yearStr);
+                weightedYearAvg[year] = yearTotals[year] / yearCounts[year];
+        }
 
-    const baseline = weightedYearAvg[2021] || 0;
+        const baseline = weightedYearAvg[2021] || 0;
 
-    results.forEach((r) => {
-        const yearAvg = weightedYearAvg[r.FundingYear] || 0;
-        const change = r.FundingYear === 2021 ? 0 : ((yearAvg - baseline) / Math.abs(baseline || 1)) * 100;
-        r.YoYChange = change.toFixed(2);
-    });
+        results.forEach((r) => {
+                const yearAvg = weightedYearAvg[r.FundingYear] || 0;
+                const change = r.FundingYear === 2021 ? 0 : ((yearAvg - baseline) / Math.abs(baseline || 1)) * 100;
+                r.YoYChange = change.toFixed(2);
+        });
 
-    results.sort((a, b) => {
-        if (a.FundingYear !== b.FundingYear) return a.FundingYear - b.FundingYear;
-        return b._rawAvgSavings - a._rawAvgSavings;
-    });
+        results.sort((a, b) => {
+                if (a.FundingYear !== b.FundingYear) return a.FundingYear - b.FundingYear;
+                return b._rawAvgSavings - a._rawAvgSavings;
+        });
 
-    results.forEach(r => delete r._rawAvgSavings);
+        results.forEach(r => delete r._rawAvgSavings);
 
-    return results;
+        return results;
 }
 
 
@@ -512,9 +512,12 @@ async function generateReports() {
  * @returns void
  */
 function reportSelection() {
-        let choice = scan.question("Back to Report Selection (Y/N): ");
-        choice = choice.toUpperCase();
+        let choice;
         while (true) {
+
+                choice = scan.question("Back to Report Selection (Y/N): ");
+                choice = choice.toUpperCase();
+
                 if (choice === 'Y') {
                         main();
                         break;
@@ -522,8 +525,7 @@ function reportSelection() {
                         console.log("Exiting the program.");
                         process.exit(0);
                 } else {
-                        console.log("Invalid choice.");
-                        choice = scan.question("Back to Report Selection (Y/N): ");
+                        console.log("Invalid choice. Please enter Y or N.");
                 }
         }
 }
@@ -537,26 +539,32 @@ async function main() {
         console.log("2. Generate Reports");
         console.log("");
 
-        let choice = parseInt(scan.question("Enter choice: "));
+        let choice;
 
-        if (choice === 1) {
-                try {
-                        const rows = await loadCSV(INPUT_FILE);
-                        const cleaned = cleanAndPrepareData(rows);
-                        console.log(`Processing dataset... (${rows.length} rows loaded, ${cleaned.length} filtered for 2021-2023)`);
-                        console.log("");
+        while (true) {
+                choice = parseInt(scan.question("Enter choice: "));
 
-                        loadedData = cleaned;
+                if (choice === 1) {
+                        try {
+                                const rows = await loadCSV(INPUT_FILE);
+                                const cleaned = cleanAndPrepareData(rows);
+                                console.log(`Processing dataset... (${rows.length} rows loaded, ${cleaned.length} filtered for 2021-2023)`);
+                                console.log("");
 
-                        main();
-                } catch (err) {
-                        console.error("Error loading file:", err);
+                                loadedData = cleaned;
+
+                                await main();
+                                break;
+                        } catch (err) {
+                                console.error("Error loading file:", err);
+                        }
+                } else if (choice === 2) {
+                        await generateReports();
+                        reportSelection();
+                        break;
+                } else {
+                        console.log("Invalid choice. Please enter 1 or 2.");
                 }
-        } else if (choice === 2) {
-                await generateReports();
-                reportSelection();
-        } else {
-                console.log("Invalid choice.");
         }
 }
 
