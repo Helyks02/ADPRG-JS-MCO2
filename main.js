@@ -88,16 +88,15 @@ function average(arr) {
         return count ? sum / count : 0;
 }
 
-/** formatNumber: Format a number with commas and fixed decimal places
+/** formatNumber: Format a number with fixed decimal places
  * @param {number} n 
  * @param {number} decimals 
  * @returns formatted string
  */
 function formatNumber(n, decimals = 2) {
-        // Handle NaN case
-        if (isNaN(n)) return "0.00";
-        // Format number with specified decimal places
-        return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+        // Handle null, undefined, empty string, or NaN cases and returns null
+        if (n === null || n === undefined || n === "" || isNaN(n)) return null;
+        return Number(parseFloat(n).toFixed(decimals));
 }
 
 /** loadCSV: Load CSV data from a file path
@@ -458,6 +457,32 @@ function generateSummary(data, contractors, regions) {
         };
 }
 
+/**
+ * formatCell: Format cell value for display in preview
+ * @param {*} value 
+ * @returns value as formatted string
+ */
+function formatCell(value) {
+        // Handle null or undefined
+        if (value === null || value === undefined) return "";
+
+        // If value is already a string, trim it to check for empty strings
+        const strVal = value.toString().trim();
+        if (strVal === "") return "";
+
+        // Try to parse it as a number
+        const num = Number(value);
+
+        // Check if it is a valid number (and not NaN)
+        if (!isNaN(num)) {
+                // 'en-US' ensures commas are used for thousands (e.g., 1,000.00)
+                return num.toLocaleString('en-US');
+        }
+
+        // Return original value if it's not a number
+        return value.toString();
+}
+
 /** previewFile: Preview the first few lines of a CSV file in a formatted table
  * @param {string} filePath 
  * @param {number} lines
@@ -507,7 +532,16 @@ async function previewFile(filePath, lines, reportTitle = "", filterNote = "", r
 
                 // Determine column widths for formatting
                 const headers = Object.keys(results[0]);
-                const colWidths = headers.map(h => Math.max(h.length, ...results.map(r => (r[h] ? r[h].toString().length : 0))) + 2);
+
+                const colWidths = headers.map(h => {
+                        const maxContentLength = Math.max(
+                                ...results.map(r => {
+                                        const val = r[h];
+                                        return val ? formatCell(val).length : 0;
+                                })
+                        );
+                        return Math.max(h.length, maxContentLength) + 2;
+                });
 
                 // Print header row
                 const headerRow = headers.map((h, i) => h.padEnd(colWidths[i])).join(" | ");
@@ -516,7 +550,12 @@ async function previewFile(filePath, lines, reportTitle = "", filterNote = "", r
 
                 // Print data rows
                 for (const r of results) {
-                        const rowStr = headers.map((h, i) => (r[h] ? r[h].toString().padEnd(colWidths[i]) : " ".repeat(colWidths[i]))).join(" | ");
+                        const rowStr = headers.map((h, i) => {
+                                // Apply formatting before padding
+                                const formattedValue = formatCell(r[h]);
+                                return formattedValue.padEnd(colWidths[i]);
+                        }).join(" | ");
+
                         console.log(rowStr);
                 }
                 console.log("");
@@ -628,8 +667,18 @@ async function generateReports() {
         // Display summary preview
         console.log("\nSummary Preview:");
         console.log(JSON.stringify({
-                global_avg_delay: formatNumber(parseFloat(summaryData.avgGlobalDelay.replace(/,/g, ""))),
-                total_savings: formatNumber(parseFloat(summaryData.totalSavings.replace(/,/g, ""))),
+                global_avg_delay: parseFloat(summaryData.avgGlobalDelay)
+                        .toLocaleString('en-US',
+                                {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2
+                                }),
+                total_savings: parseFloat(summaryData.totalSavings)
+                        .toLocaleString('en-US',
+                                {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2
+                                }),
         }, null, 0));
 
 }
