@@ -422,13 +422,25 @@ function generateReport3(data) {
         }
 
         // Calculate Year-over-Year change compared to 2021 baseline
-        const baseline = weightedYearAvg[2021] || 0;
+        const baselineByType = {};
+        results.forEach(r => {
+                if (r.FundingYear === 2021) {
+                        baselineByType[r.TypeOfWork] = r._rawAvgSavings;
+                }
+        });
 
-        // Add YoYChange to each result
-        results.forEach((r) => {
-                const yearAvg = weightedYearAvg[r.FundingYear] || 0;
-                const change = r.FundingYear === 2021 ? 0 : ((yearAvg - baseline) / Math.abs(baseline || 1)) * 100;
-                r.YoYChange = change.toFixed(2);
+        // Compute YoYChange per project type
+        results.forEach(r => {
+                // Get baseline for TypeOfWork
+                const baseline = baselineByType[r.TypeOfWork] || 0;
+                
+                // Calculate YoYChange
+                if (r.FundingYear === 2021 || baseline === 0) {
+                        r.YoYChange = "0.00";
+                } else {
+                        const change = ((r._rawAvgSavings - baseline) / Math.abs(baseline)) * 100;
+                        r.YoYChange = change.toFixed(2);
+                }
         });
 
         // Sort results by FundingYear ascending, then AvgCostSavings descending
@@ -478,6 +490,10 @@ function formatCell(value, noCommas = false) {
         // If value is already a string, trim it to check for empty strings
         const strVal = value.toString().trim();
         if (strVal === "") return "";
+
+        // If value is already formatted as a string with 2 decimal places, return as is
+        if (typeof value === "string" && /^\d+\.\d{2}$/.test(value))
+                return value;
 
         // Try to parse it as a number
         const num = Number(value);
