@@ -166,6 +166,7 @@ function cleanAndPrepareData(rawRows) {
                 const MainIsland = row.MainIsland?.trim() || "Unknown";
                 const Contractor = row.Contractor?.trim() || "Unknown Contractor";
                 const TypeOfWork = row.TypeOfWork?.trim() || "Unspecified";
+                const Province = row.Province?.trim() || "Unknown";
 
                 // Calculate CostSavings and CompletionDelayDays
                 const CostSavings = ApprovedBudgetForContract - ContractCost;
@@ -181,6 +182,7 @@ function cleanAndPrepareData(rawRows) {
                         FundingYear,
                         Region,
                         MainIsland,
+                        Province,
                         Contractor,
                         TypeOfWork,
                         CostSavings,
@@ -433,7 +435,7 @@ function generateReport3(data) {
         results.forEach(r => {
                 // Get baseline for TypeOfWork
                 const baseline = baselineByType[r.TypeOfWork] || 0;
-                
+
                 // Calculate YoYChange
                 if (r.FundingYear === 2021 || baseline === 0) {
                         r.YoYChange = "0.00";
@@ -469,7 +471,7 @@ function generateSummary(data, report1Rows, report2Rows, report3Rows) {
         return {
                 total_projects: data.length,
                 total_contractors: new Set(data.map(r => r.Contractor)).size,
-                total_provinces: new Set(data.map(r => r.Region)).size,
+                total_provinces: new Set(data.map(r => r.Province)).size,
                 global_avg_delay_days: formatNumber(average(data.map(r => r.CompletionDelayDays))),
                 total_savings: formatNumber(data.reduce((a, b) => a + b.CostSavings, 0)),
                 report1_regions: report1Rows.length,
@@ -491,15 +493,13 @@ function formatCell(value, noCommas = false) {
         const strVal = value.toString().trim();
         if (strVal === "") return "";
 
-        // If value is already formatted as a string with 2 decimal places, return as is
-        if (typeof value === "string" && /^\d+\.\d{2}$/.test(value) && value === "0.00")
-                return value;
-
         // Try to parse it as a number
         const num = Number(value);
 
         // Check if it is a valid number (and not NaN)
         if (!isNaN(num)) {
+                if (num === 0)
+                        return "0.00";
                 if (noCommas)
                         return num.toString();
                 // 'en-US' ensures commas are used for thousands (e.g., 1,000.00)
