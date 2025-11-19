@@ -471,7 +471,7 @@ function generateSummary(data, report1Rows, report2Rows, report3Rows) {
  * @param {*} value 
  * @returns value as formatted string
  */
-function formatCell(value) {
+function formatCell(value, noCommas = false) {
         // Handle null or undefined
         if (value === null || value === undefined) return "";
 
@@ -484,6 +484,8 @@ function formatCell(value) {
 
         // Check if it is a valid number (and not NaN)
         if (!isNaN(num)) {
+                if (noCommas)
+                        return num.toString();
                 // 'en-US' ensures commas are used for thousands (e.g., 1,000.00)
                 return num.toLocaleString('en-US');
         }
@@ -561,7 +563,7 @@ async function previewFile(filePath, lines, reportTitle = "", filterNote = "", r
                 for (const r of results) {
                         const rowStr = headers.map((h, i) => {
                                 // Apply formatting before padding
-                                const formattedValue = formatCell(r[h]);
+                                const formattedValue = formatCell(r[h], h === "FundingYear");
                                 return formattedValue.padEnd(colWidths[i]);
                         }).join(" | ");
 
