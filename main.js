@@ -492,7 +492,7 @@ function formatCell(value, noCommas = false) {
         if (strVal === "") return "";
 
         // If value is already formatted as a string with 2 decimal places, return as is
-        if (typeof value === "string" && /^\d+\.\d{2}$/.test(value))
+        if (typeof value === "string" && /^\d+\.\d{2}$/.test(value) && value === "0.00")
                 return value;
 
         // Try to parse it as a number
