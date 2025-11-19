@@ -579,17 +579,32 @@ async function previewFile(filePath, lines, reportTitle = "", filterNote = "", r
                 for (const r of results) {
                         const rowStr = headers.map((h, i) => {
                                 // Apply formatting before padding
-                                const formattedValue = formatCell(r[h], h === "FundingYear");
-                                return formattedValue.padEnd(colWidths[i]);
-                        }).join(" | ");
+                                let formattedValue;
 
-                        console.log(rowStr);
-                }
+                                if (h === "OverrunRate") {
+                                        // Only round numeric values, leave non-numeric as-is
+                                        const val = r[h];
+                                        const num = parseFloat(val);
+                                        if (!isNaN(num)) {
+                                                formattedValue = num.toFixed(2); // force 2 decimals
+                                        } else {
+                                                formattedValue = val; // keep original if not a number
+                                        }
+                                } else {
+                                        // Default formatting for other columns
+                                        formattedValue = formatCell(r[h], h === "FundingYear");
+                                }
+
+                                return formattedValue.padEnd(colWidths[i]);
+                }).join(" | ");
+
+                console.log(rowStr);
+        }
                 console.log("");
 
-        } catch (err) {
-                console.error(`Error previewing ${filePath}:`, err);
-        }
+} catch (err) {
+        console.error(`Error previewing ${filePath}:`, err);
+}
 }
 
 
