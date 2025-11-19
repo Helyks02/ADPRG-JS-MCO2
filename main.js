@@ -303,7 +303,7 @@ function generateReport2(data) {
         }
 
         // Filter, compute metrics, and prepare for sorting
-        const results = Object.values(contractorMap)
+        let results = Object.values(contractorMap)
 
                 // Only include contractors with at least 5 projects
                 .filter((c) => c.projects >= 5)
@@ -345,6 +345,12 @@ function generateReport2(data) {
                         delete c._rawTotalCost;
                         return c;
                 });
+
+        // Assign ranks
+        results = results.map((c, index) => ({
+                Rank: index + 1,
+                ...c
+        }));
 
         // Return final results
         return results;
@@ -446,14 +452,17 @@ function generateReport3(data) {
  * @param {Object} regions
  * @returns summary object
  */
-function generateSummary(data, contractors, regions) {
+function generateSummary(data, report1Rows, report2Rows, report3Rows) {
         // Calculate average global delay
         return {
-                totalProjects: data.length,
-                totalContractors: Object.keys(contractors).length,
-                totalRegions: Object.keys(regions).length,
-                avgGlobalDelay: formatNumber(average(data.map((r) => r.CompletionDelayDays))),
-                totalSavings: formatNumber(data.reduce((a, b) => a + b.CostSavings, 0)),
+                total_projects: data.length,
+                total_contractors: new Set(data.map(r => r.Contractor)).size,
+                total_provinces: new Set(data.map(r => r.Region)).size,
+                global_avg_delay_days: formatNumber(average(data.map(r => r.CompletionDelayDays))),
+                total_savings: formatNumber(data.reduce((a, b) => a + b.CostSavings, 0)),
+                report1_regions: report1Rows.length,
+                report2_contractors: report2Rows.length,
+                report3_entries: report3Rows.length
         };
 }
 
@@ -602,6 +611,7 @@ async function generateReports() {
         // Generate each report
         console.log("");
         console.log("Generating reports...");
+        console.log("Outputs saved to individual files...");
 
         // Clean and prepare data
         const data = cleanAndPrepareData(loadedData);
@@ -638,7 +648,7 @@ async function generateReports() {
 
         // Report 3: Cost Savings Trends by Funding Year and Type of Work
         const report3 = generateReport3(data);
-        const file3 = "report3_cost_trends.csv";
+        const file3 = "report3_annual_trends.csv";
         await writeCSV(file3, report3);
         await previewFile(
                 file3,
@@ -652,8 +662,9 @@ async function generateReports() {
         // Summary Stats
         const summary = generateSummary(
                 data,
-                Object.fromEntries(report2.map((r) => [r.Contractor, r])),
-                Object.fromEntries(report1.map((r) => [r.Region, r]))
+                report1,
+                report2,
+                report3
         );
 
         // Write summary to JSON file
@@ -667,20 +678,21 @@ async function generateReports() {
         // Display summary preview
         console.log("\nSummary Preview:");
         console.log(JSON.stringify({
-                global_avg_delay: parseFloat(summaryData.avgGlobalDelay)
+                global_avg_delay: parseFloat(summaryData.global_avg_delay_days)
                         .toLocaleString('en-US',
                                 {
                                         minimumFractionDigits: 2,
                                         maximumFractionDigits: 2
                                 }),
-                total_savings: parseFloat(summaryData.totalSavings)
+                total_savings: parseFloat(summaryData.total_savings)
                         .toLocaleString('en-US',
                                 {
                                         minimumFractionDigits: 2,
                                         maximumFractionDigits: 2
                                 }),
-        }, null, 0));
-
+        }, null, 0)
+                .replace(/:/g, ": "));
+        console.log("");
 }
 
 /** reportSelection: Prompt user to return to report selection or exit
@@ -694,6 +706,7 @@ function reportSelection() {
         while (true) {
 
                 choice = scan.question("Back to Report Selection (Y/N): ");
+                console.log("");
                 choice = choice.toUpperCase();
 
                 // Handle user choice
@@ -701,7 +714,7 @@ function reportSelection() {
                         main();
                         break;
                 } else if (choice === 'N') {
-                        console.log("Exiting the program.");
+                        console.log("Exiting DPWH Flood Control Data Pipeline...");
                         process.exit(0);
                 } else {
                         console.log("Invalid choice. Please enter Y or N.");
